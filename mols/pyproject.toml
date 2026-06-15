@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.distutils.bdist_wheel]
+universal = "true"
+
+[project]
+name = "gflownet"
+readme = "README.md"
+classifiers = ["Operating System :: OS Independent", "Programming Language :: Python", "Programming Language :: Python :: 3"]
+keywords = ["gflownet"]
+requires-python = ">=3.10,<3.11"
+dynamic = ["version"]
+dependencies = [
+    "torch==2.1.2",
+    "torch-geometric==2.4.0",
+    "torch-scatter==2.1.2",
+    "torch-sparse==0.6.18",
+    "torch-cluster==1.6.3",
+    "rdkit",
+    "tables",
+    "scipy",
+    "networkx",
+    "tensorboard",
+    "cvxopt",
+    "pyarrow",
+    "gitpython",
+    "botorch",
+    "pyro-ppl",
+    "gpytorch",
+    "omegaconf>=2.3",
+    "wandb",
+    "pandas", # needed for QM9 and HDF5 support.
+]
+
+[[project.authors]]
+name = "Recursion Pharmaceuticals"
+email = "devs@recursionpharma.com"
+
