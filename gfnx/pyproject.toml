@@ -1,0 +1,88 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+sources = ["src"]
+
+
+[project]
+name = "gfnx"
+version = "0.0.1"
+dependencies = [
+  "jax>=0.4.27.0",
+  "jaxlib>=0.4.27.0",
+  "chex",
+  "flashbax",
+  "numpy==1.26.4",
+  "jax_tqdm",
+  "jaxtyping",
+  "networkx",
+  "omegaconf",
+  "matplotlib"
+]
+authors = [
+  { name="Daniil Tiapkin" },
+  { name="Artem Agarkov" },
+  { name="Nikita Morozov" },
+  { name="Ian Maksimov" },
+  { name="Askar Tsyganov" },
+  { name="Timofei Gritsaev" },
+  { name="Sergey Samsonov" },
+]
+license = "MIT"
+description = "Environments for Generative Flow Networks in JAX"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+baselines = [
+  "optax",
+  "equinox",
+  "flashbax",
+  "wandb",
+  "orbax-checkpoint",
+  "hydra-core",
+  "jax_tqdm",
+  "pillow",
+  "jraph",
+  "comet-ml",
+]
+tests = [
+  "pytest",
+  "equinox"
+]
+
+[project.urls]
+Homepage = "https://github.com/d-tiapkin/gfnx"
+Issues = "https://github.com/d-tiapkin/gfnx/issues"
+
+
+
+[tool.ruff]
+preview = true
+exclude = [
+    ".git",
+    "build",
+    "__pycache__",
+    "algo"
+]
+line-length = 99
+indent-width = 4
+target-version = "py310"
+
+
+[tool.ruff.lint]
+# Add the `line-too-long` rule to the enforced rule set. By default, Ruff omits rules that
+# overlap with the use of a formatter, like Black, but we can override this behavior by
+# explicitly adding the rule.
+extend-select = ["E501"]
+ignore = [ "F722" ]
+
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
