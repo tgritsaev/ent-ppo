@@ -91,3 +91,57 @@ python scripts/submit_fixed_pb_grid.py \
 ```
 
 Use `--dry-run` to print the generated `sbatch` commands without submitting jobs.
+
+## Experiments on synthetic problems
+
+Synthetic experiments cover three environments from the paper: **Hypergrid**, **TFBind8**, and **String QM9**. The code lives in `gfnx/` and uses the JAX-based [`gfnx`](https://github.com/d-tiapkin/gfnx) library.
+
+The following methods from the paper are included:
+
+| Method | Scripts |
+|---|---|
+| **Ent-PPO** | `PPO_hypergrid.py`, `PPO_tfbind.py`, `PPO_qm9_small.py` |
+| VPG (GAE) = Ent-PPO (K=1) | `GAE_hypergrid.py`, `GAE_tfbind.py`, `GAE_qm9_small.py` |
+| VPG (Simplest), VPG (Reward-to-go), VPG (Value Baseline) | `RTG_pg_*`, `vanilla_pg_*`, `v_baseline_*` |
+| VPG (SubEB-GAE) | `GAE_subeb_*`|
+
+GFlowNet baselines (TB, DB, SubTB) and TRPO are also included for comparison. Each script is a self-contained single-file experiment. Configuration files are in `gfnx/baselines/configs/`.
+
+### Installation
+
+Requires Python 3.10+. For GPU/TPU support, follow the [official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html) before running the commands below.
+
+```bash
+cd gfnx
+pip install -e .[baselines]
+```
+
+### Quick run
+
+All scripts must be run from the `gfnx/`.
+
+Run a short Ent-PPO training on Hypergrid:
+
+```bash
+cd gfnx
+python baselines/PPO_hypergrid.py num_train_steps=1000
+```
+
+### Reproduce experiments from the paper
+
+The paper trains all methods for 31 250 iterations on Hypergrid, 200 000 on TFBind8, and 50 000 on String QM9, with 3 seeds each. All experiments run on CPU.
+
+To reproduce a single run, use the default config (which matches the paper hyperparameters) and override the seed:
+
+```bash
+# VPG GAE on Hypergrid
+python baselines/GAE_hypergrid.py seed=1
+
+# VPG Reward-to-go on TFBind8
+python baselines/RTG_pg_tfbind.py seed=2
+
+# Ent-PPO on String QM9
+python baselines/PPO_qm9_small.py seed=3
+```
+
+Online experiment tracking is disabled by default. To enable Comet ML logging, set the `COMET_API_KEY` environment variable and pass `writer.writer_type=comet_ml logging.use_writer=true` on the command line.
