@@ -1,7 +1,7 @@
 # Proximal Policy Optimization for Amortized Discrete Sampling
 
 > [**Proximal Policy Optimization for Amortized Discrete Sampling**](https://github.com/tgritsaev/ent-ppo/),            
-> Anna Zykova-Myzina*, Timofei Gritsaev*, Daniil Tiapkin†, Nikita Morozov†
+> Anna Zykova-Myzina*, Timofei Gritsaev*, Daniil Tiapkin†, Nikita Morozov†,
 > *ICML 2026, SPIGM Workshop ([arXiv 2606.15793](https://arxiv.org/abs/2606.15793))*  
 
 ## Contact
