@@ -1,23 +1,83 @@
 # Proximal Policy Optimization for Amortized Discrete Sampling
 
-This repository contains the code for the paper Proximal Policy Optimization for Amortized Discrete Sampling (Poster at ICML 2026, SPIGM Workshop).
+> [**Proximal Policy Optimization for Amortized Discrete Sampling**](https://github.com/tgritsaev/ent-ppo/),            
+> Anna Zykova-Myzina*, Timofei Gritsaev*, Daniil Tiapkin†, Nikita Morozov†
+> *ICML 2026, SPIGM Workshop ([arXiv 2606.15793](https://arxiv.org/abs/2606.15793))*  
 
-This publication snapshot currently contains the molecule experiments under `mols/`. The `mols/` code is based on [`recursionpharma/gflownet`](https://github.com/recursionpharma/gflownet) and includes the code for sEH and QM9 experiments.
+## Contact
 
-## Layout
+Feel free to contact us if you have any questions about the paper!
 
-```text
-mols/   PyTorch GFlowNet molecule-generation experiments for sEH and QM9
+- Anna Zykova-Myzina [azykova.myzina@gmail.com](mailto:azykova.myzina@gmail.com)
+- Timofei Gritsaev [tgritsaev@gmail.com](mailto:tgritsaev@gmail.com)
+
+## Abstract
+
+This paper explores policy gradient algorithms for training stochastic policies to
+sample from structured discrete probability distributions under the Generative Flow
+Network (GFlowNet) framework. Building on extensive theoretical connections
+between GFlowNets and entropy-regularized reinforcement learning, we derive
+equivalents of standard policy gradient algorithms for training GFlowNets, as well
+as experimentally explore their various methodological aspects, including baseline
+training and advantage estimation. Most importantly, our work is the first to derive
+and successfully apply proximal policy optimization to GFlowNets, showing its
+improved convergence speed and data efficiency compared to standard GFlowNet
+training objectives on benchmarks ranging from synthetic energies to molecular
+graph generation.
+
+## Structure
+
+The structure is the following:
+- **Synthetic problems: Hypergrid, TFBind8, and String QM9.** The code for experiments on synthetic problems is located in `gfnx/` 
+and includes Hypergrid, TFBind8, and String QM9. The implementation is based on the JAX-based [`gfnx`](https://github.com/d-tiapkin/gfnx) library.
+- **Molecular-graph generation: sEH and QM9.** The code for experiments on graph molecular problems is located in `mols/` and includes sEH and QM9 experiments. 
+ The implementation is based on the [code of recursionpharma](https://github.com/recursionpharma/gflownet).
+
+## Experiments on synthetic problems
+
+Synthetic experiments cover three environments from the paper: **Hypergrid**, **TFBind8**, and **String QM9**. 
+The code lives in `gfnx/` and uses the JAX-based [`gfnx`](https://github.com/d-tiapkin/gfnx) library.
+
+### Installation
+
+Requires Python 3.10+. For GPU/TPU support, follow the [official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html) before running the commands below.
+
+```bash
+cd gfnx
+pip install -e .[baselines]
 ```
 
-Important entry points:
+### Quick run
 
-- `mols/scripts/run_single_seh_metrics.py`: run one sEH or QM9 job locally.
-- `mols/scripts/launch_seh_metrics_sbatch.py`: submit one algorithm group to Slurm.
-- `mols/scripts/submit_fixed_pb_grid.py`: submit the fixed-backward-policy paper grid.
-- `mols/scripts/submit_qm9_learned_pb_tlm_lr_grid.py`: submit the QM9 learned-backward-policy/TLM grid.
+All scripts must be run from the `gfnx/`.
 
-## Experiments on molecules
+Run a short Ent-PPO training on Hypergrid:
+
+```bash
+cd gfnx
+python baselines/PPO_hypergrid.py num_train_steps=1000
+```
+
+### Reproduce experiments from the paper
+
+The paper trains all methods for 31 250 iterations on Hypergrid, 200 000 on TFBind8, and 50 000 on String QM9, with 3 seeds each. All experiments run on CPU.
+
+To reproduce a single run, use the default config and override the seed:
+
+```bash
+# VPG GAE on Hypergrid
+python baselines/GAE_hypergrid.py seed=1
+
+# VPG Reward-to-go on TFBind8
+python baselines/RTG_pg_tfbind.py seed=2
+
+# Ent-PPO on String QM9
+python baselines/PPO_qm9_small.py seed=3
+```
+
+Online experiment tracking is disabled by default. To enable Comet ML logging, set the `COMET_API_KEY` environment variable and pass `writer.writer_type=comet_ml logging.use_writer=true` on the command line.
+
+## Experiments on molecular-graph generation
 
 ### Installation
 
@@ -92,56 +152,17 @@ python scripts/submit_fixed_pb_grid.py \
 
 Use `--dry-run` to print the generated `sbatch` commands without submitting jobs.
 
-## Experiments on synthetic problems
+# Citation
 
-Synthetic experiments cover three environments from the paper: **Hypergrid**, **TFBind8**, and **String QM9**. The code lives in `gfnx/` and uses the JAX-based [`gfnx`](https://github.com/d-tiapkin/gfnx) library.
+If you find Ent-PPO useful or relevant to your research, please kindly cite our papers:
 
-The following methods from the paper are included:
-
-| Method | Scripts |
-|---|---|
-| **Ent-PPO** | `PPO_hypergrid.py`, `PPO_tfbind.py`, `PPO_qm9_small.py` |
-| VPG (GAE) = Ent-PPO (K=1) | `GAE_hypergrid.py`, `GAE_tfbind.py`, `GAE_qm9_small.py` |
-| VPG (Simplest), VPG (Reward-to-go), VPG (Value Baseline) | `RTG_pg_*`, `vanilla_pg_*`, `v_baseline_*` |
-| VPG (SubEB-GAE) | `GAE_subeb_*`|
-
-GFlowNet baselines (TB, DB, SubTB) and TRPO are also included for comparison. Each script is a self-contained single-file experiment. Configuration files are in `gfnx/baselines/configs/`.
-
-### Installation
-
-Requires Python 3.10+. For GPU/TPU support, follow the [official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html) before running the commands below.
-
-```bash
-cd gfnx
-pip install -e .[baselines]
 ```
-
-### Quick run
-
-All scripts must be run from the `gfnx/`.
-
-Run a short Ent-PPO training on Hypergrid:
-
-```bash
-cd gfnx
-python baselines/PPO_hypergrid.py num_train_steps=1000
+@inproceedings{
+  zykova-myzina2026proximal,
+  title={Proximal Policy Optimization for Amortized Discrete Sampling},
+  author={Anna Zykova-Myzina and Timofei Gritsaev and Daniil Tiapkin and Nikita Morozov},
+  booktitle={ICML 2026 Workshop on Structured Probabilistic Inference {\&} Generative Modeling},
+  year={2026},
+  url={https://openreview.net/forum?id=ODbzTJmgp3}
+}
 ```
-
-### Reproduce experiments from the paper
-
-The paper trains all methods for 31 250 iterations on Hypergrid, 200 000 on TFBind8, and 50 000 on String QM9, with 3 seeds each. All experiments run on CPU.
-
-To reproduce a single run, use the default config (which matches the paper hyperparameters) and override the seed:
-
-```bash
-# VPG GAE on Hypergrid
-python baselines/GAE_hypergrid.py seed=1
-
-# VPG Reward-to-go on TFBind8
-python baselines/RTG_pg_tfbind.py seed=2
-
-# Ent-PPO on String QM9
-python baselines/PPO_qm9_small.py seed=3
-```
-
-Online experiment tracking is disabled by default. To enable Comet ML logging, set the `COMET_API_KEY` environment variable and pass `writer.writer_type=comet_ml logging.use_writer=true` on the command line.
