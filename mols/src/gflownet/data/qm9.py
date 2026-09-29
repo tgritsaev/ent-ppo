@@ -31,9 +31,15 @@ class QM9Dataset(Dataset):
         else:
             self.idcs = idcs[int(np.floor(ratio * len(self.df))) :]
         self.obj_to_graph = lambda x: x
+        self.task = None
+        self._reward_cache = {}
+        self._valid_cache = {}
 
     def setup(self, task, ctx):
         self.obj_to_graph = ctx.obj_to_graph
+        self.task = task
+        self._reward_cache.clear()
+        self._valid_cache.clear()
 
     def get_stats(self, target=None, percentile=0.95):
         if target is None:
@@ -45,10 +51,25 @@ class QM9Dataset(Dataset):
         return len(self.idcs)
 
     def __getitem__(self, idx):
-        return (
-            self.obj_to_graph(Chem.MolFromSmiles(self.df["SMILES"][self.idcs[idx]])),
-            torch.tensor([self.df[t][self.idcs[idx]] for t in self.targets]).float(),
-        )
+        if self.task is None:
+            raise RuntimeError("QM9Dataset.setup(task, ctx) must precede reward access")
+        row = int(self.idcs[idx])
+        mol = Chem.MolFromSmiles(self.df["SMILES"].iloc[row])
+        if row not in self._reward_cache:
+            # Dataset and policy samples must use the same surrogate and reward
+            # transform. Raw QM9 gap labels are not rewards. Cache the untempered
+            # reward; DataSource applies the trajectory's beta afterwards.
+            with torch.no_grad():
+                props, valid = self.task.compute_obj_properties([mol])
+            self._valid_cache[row] = bool(valid[0])
+            self._reward_cache[row] = (
+                props[0].detach().cpu().clone() if valid[0] else torch.zeros(1)
+            )
+        return self.obj_to_graph(mol), self._reward_cache[row].clone()
+
+    def is_valid(self, idx):
+        """Scoring validity, populated by __getitem__; false entries are omitted in evaluation."""
+        return self._valid_cache[int(self.idcs[idx])]
 
     def terminate(self):
         if self.is_hdf:

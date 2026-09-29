@@ -353,12 +353,12 @@ def train_step(idx: int, train_state: TrainState) -> TrainState:
         V_pred = baseline_values[:, :-1]
         masked_V_pred = jnp.where(pad_mask_for_bwd, 0.0, V_pred)
 
-        pb_or_terminal = jnp.where(
-            terminal_step_mask,
-            masked_log_rewards_at_steps - logZ_val,
-            log_pb_selected,
+        # The last token insertion is a real edge with P_B=1/2. Its
+        # backward log-probability must remain alongside the terminal reward.
+        terminal_log_reward = jnp.where(
+            terminal_step_mask, masked_log_rewards_at_steps - logZ_val, 0.0
         )
-        scores = fwd_logprobs_traj[:, :-1] - pb_or_terminal
+        scores = fwd_logprobs_traj[:, :-1] - log_pb_selected - terminal_log_reward
         scores = jnp.where(pad_mask_for_bwd, 0.0, scores)
 
         return {

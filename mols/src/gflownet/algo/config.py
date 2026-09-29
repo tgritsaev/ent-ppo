@@ -37,6 +37,7 @@ class TBVariant(IntEnum):
     TB = 0
     SubTB1 = 1
     DB = 2
+    VarGrad = 3
 
 
 class LossFN(IntEnum):
@@ -135,6 +136,33 @@ class EntPPOConfig(StrictDataClass):
 
 
 @dataclass
+class TRPOConfig(EntPPOConfig):
+    """TRPO uses PPO's rollout/critic infrastructure, not its policy objective."""
+    critic_regime: str = "ours"
+    critic_lambda: float = 0.7
+    delta: float = 0.01
+    cg_iters: int = 10
+    cg_damping: float = 0.0
+    line_search_iters: int = 10
+    line_search_shrink: float = 0.5
+    logZ_learning_rate: float = 0.1
+    policy_updates: int = 1
+    do_sample_p_b: bool = True
+
+
+def resolve_trpo_regime(cfg):
+    if cfg.critic_regime not in {"ours", "gfn_pg"}:
+        raise ValueError("TRPO critic_regime must be ours or gfn_pg")
+    ours = cfg.critic_regime == "ours"
+    cfg.gae_lambda = 0.7 if ours else 0.99
+    cfg.critic_lambda = 0.7 if ours else 1.0
+    cfg.value_updates = 4 if ours else 1
+    cfg.value_num_splits = 8 if ours else 1
+    cfg.policy_updates = 1
+    return cfg
+
+
+@dataclass
 class AlgoConfig(StrictDataClass):
     """Generic configuration for algorithms
 
@@ -198,3 +226,4 @@ class AlgoConfig(StrictDataClass):
     use_backward_ema: bool = False
     tb: TBConfig = field(default_factory=TBConfig)
     ent_ppo: EntPPOConfig = field(default_factory=EntPPOConfig)
+    trpo: TRPOConfig = field(default_factory=TRPOConfig)

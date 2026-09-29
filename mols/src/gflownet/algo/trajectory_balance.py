@@ -23,9 +23,17 @@ from gflownet.envs.graph_building_env import (
     GraphBuildingEnvContext,
     generate_forward_trajectory,
 )
-from gflownet.trainer import GFNAlgorithm
+from gflownet import GFNAlgorithm
 from gflownet.utils.eval_metrics import add_bound_metrics, add_correlation_metric
 from gflownet.utils.misc import get_worker_device
+
+
+def batch_log_partition_variance(log_weights: Tensor) -> Tuple[Tensor, Tensor]:
+    """Population variance (1/B), equivalent to TB minimized over a batch logZ."""
+    if log_weights.ndim != 1 or log_weights.numel() == 0:
+        raise ValueError("VarGrad requires a nonempty vector of trajectory log-weights.")
+    log_z = log_weights.mean().detach()
+    return (log_weights - log_z).square(), log_z
 
 
 def shift_right(x: torch.Tensor, z=0):
@@ -113,6 +121,11 @@ class TrajectoryBalance(GFNAlgorithm):
         self.env = env
         self.global_cfg = cfg
         self.cfg = cfg.algo.tb
+        if self.cfg.variant == TBVariant.VarGrad:
+            if cfg.cond.temperature.sample_dist != "constant":
+                raise ValueError("VarGrad requires a fixed reward temperature shared by all trajectories.")
+            if self.cfg.loss_fn != LossFN.MSE or self.cfg.epsilon is not None or self.cfg.do_length_normalize:
+                raise ValueError("VarGrad requires MSE without log-flow smoothing or length normalization.")
         self.max_len = cfg.algo.max_len
         self.max_nodes = cfg.algo.max_nodes
         self.length_normalize_losses = cfg.algo.tb.do_length_normalize
@@ -187,7 +200,7 @@ class TrajectoryBalance(GFNAlgorithm):
         dev = get_worker_device()
         cond_info = cond_info.to(dev) if cond_info is not None else None
         data = self.graph_sampler.sample_from_model(model, n, cond_info, random_action_prob)
-        if cond_info is not None:
+        if cond_info is not None and self.cfg.variant != TBVariant.VarGrad:
             logZ_pred = model.logZ(cond_info)
             for i in range(n):
                 data[i]["logZ"] = logZ_pred[i].item()
@@ -422,7 +435,7 @@ class TrajectoryBalance(GFNAlgorithm):
             log_n_preds = None
 
         # Compute trajectory balance objective
-        log_Z = model.logZ(cond_info)[:, 0]
+        log_Z = None if self.cfg.variant == TBVariant.VarGrad else model.logZ(cond_info)[:, 0]
         # Compute the log prob of each action in the trajectory
         if self.cfg.do_correct_idempotent:
             # If we want to correct for idempotent actions, we need to sum probabilities
@@ -531,7 +544,14 @@ class TrajectoryBalance(GFNAlgorithm):
         traj_log_p_B = scatter(log_p_B, batch_idx, dim=0, dim_size=num_trajs, reduce="sum")
         bound_metric = log_rewards.float() + traj_log_p_B - traj_log_p_F
 
-        if self.cfg.variant == TBVariant.SubTB1:
+        if self.cfg.variant == TBVariant.VarGrad:
+            if num_trajs < 2 and not getattr(self, "is_eval", False):
+                raise ValueError("VarGrad training requires at least two trajectories per batch.")
+            # Recompute the batch-optimal intercept on every update, including K>1.
+            # Use the same clipped log rewards as TB; metrics retain their shared formula.
+            traj_losses, batch_log_z = batch_log_partition_variance(clip_log_R + traj_log_p_B - traj_log_p_F)
+            log_Z = batch_log_z.expand(num_trajs)
+        elif self.cfg.variant == TBVariant.SubTB1:
             # SubTB interprets the per_graph_out predictions to predict the state flow F(s)
             if self.cfg.cum_subtb:
                 traj_losses = self.subtb_cum(log_p_F, log_p_B, per_graph_out[:, 0], clip_log_R, batch.traj_lens)

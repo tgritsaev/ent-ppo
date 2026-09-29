@@ -4,7 +4,8 @@ from pathlib import Path
 
 import torch
 
-from gflownet.algo.config import Backward, TBVariant
+from gflownet.algo.config import Backward, TBVariant, resolve_trpo_regime
+from trpo_options import add_trpo_options, trpo_name
 from gflownet.config import Config, init_empty
 from gflownet.tasks.qm9 import QM9GapTrainer
 from gflownet.tasks.seh_frag import SEHFragTrainer
@@ -14,6 +15,7 @@ TB_VARIANTS = {
     "tb": TBVariant.TB,
     "db": TBVariant.DB,
     "subtb": TBVariant.SubTB1,
+    "vargrad": TBVariant.VarGrad,
 }
 
 
@@ -22,13 +24,17 @@ def make_config(args: argparse.Namespace) -> Config:
         raise ValueError("EntPPO supports backward_approach='uniform' or 'tlm', not 'naive'.")
     if args.alg == "ent_ppo" and args.random_action_schedule != "zero":
         raise ValueError("Random-action schedules are intended for TB/DB/SubTB baselines, not EntPPO.")
+    if args.alg == "trpo" and (args.baseline_k != 1 or args.backward_approach != "uniform" or args.random_action_schedule != "zero"):
+        raise ValueError("TRPO requires baseline-k=1, uniform Pb, and zero exploration")
     cfg = init_empty(Config())
     alg_dir = args.alg
     pb_suffix = f"_pb-{args.backward_approach}" if args.backward_approach != "uniform" else ""
     random_suffix = ""
     if args.random_action_schedule == "linear_half":
         random_suffix = f"_eps{args.random_action_prob:g}_linhalf"
-    if args.alg == "ent_ppo":
+    if args.alg == "trpo":
+        alg_dir = trpo_name(args)
+    elif args.alg == "ent_ppo":
         alg_dir = (
             f"{args.alg}_bs{args.batch_size}"
             f"_clip{args.ent_ppo_clip_eps:g}"
@@ -69,7 +75,7 @@ def make_config(args: argparse.Namespace) -> Config:
     cfg.opt.clip_grad_type = "norm"
     cfg.opt.clip_grad_param = 10
 
-    cfg.algo.method = "EntPPO" if args.alg == "ent_ppo" else "TB"
+    cfg.algo.method = "TRPO" if args.alg == "trpo" else ("EntPPO" if args.alg == "ent_ppo" else "TB")
     cfg.algo.num_from_policy = args.batch_size
     cfg.algo.num_from_dataset = 0
     cfg.algo.valid_num_from_policy = args.valid_batch_size
@@ -126,6 +132,14 @@ def make_config(args: argparse.Namespace) -> Config:
     cfg.algo.ent_ppo.normalize_advantages = args.ent_ppo_normalize_advantages
     cfg.algo.ent_ppo.do_sample_p_b = True
 
+    if args.alg == "trpo":
+        from gflownet.algo.config import TRPOConfig
+        cfg.algo.trpo = TRPOConfig()
+        cfg.algo.trpo.critic_regime = args.trpo_critic_regime
+        for key in ("delta", "cg_iters", "cg_damping", "line_search_iters", "line_search_shrink"):
+            setattr(cfg.algo.trpo, key, getattr(args, "trpo_" + key))
+        resolve_trpo_regime(cfg.algo.trpo)
+
     cfg.model.num_emb = 128
     cfg.model.num_layers = 4
     cfg.replay.use = False
@@ -135,8 +149,6 @@ def make_config(args: argparse.Namespace) -> Config:
         cfg.task.qm9.h5_path = args.qm9_h5_path
         cfg.task.qm9.model_path = args.qm9_model_path
         cfg.task.qm9.rdkit_conformer_timeout_seconds = args.qm9_rdkit_conformer_timeout_seconds
-        cfg.cond.temperature.sample_dist = "uniform"
-        cfg.cond.temperature.dist_params = [0.5, 32.0]
         cfg.cond.temperature.num_thermometer_dim = 32
     else:
         cfg.task.seh.large_test_mols_path = args.seh_large_test_mols_path
@@ -146,7 +158,7 @@ def make_config(args: argparse.Namespace) -> Config:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", choices=["seh", "qm9"], default="seh")
-    parser.add_argument("--alg", choices=["tb", "db", "subtb", "ent_ppo"], required=True)
+    parser.add_argument("--alg", choices=["tb", "db", "subtb", "vargrad", "ent_ppo", "trpo"], required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--valid-batch-size", type=int, default=256)
@@ -184,7 +196,8 @@ def main() -> None:
     parser.add_argument("--qm9-h5-path", default="qm9.h5")
     parser.add_argument("--qm9-model-path", default="mxmnet_gap_model.pt")
     parser.add_argument("--qm9-rdkit-conformer-timeout-seconds", type=int, default=0)
-    parser.add_argument("--seh-large-test-mols-path", default="")
+    parser.add_argument("--seh-large-test-mols-path", default="data/binary_test_mols.pkl")
+    add_trpo_options(parser)
     args = parser.parse_args()
 
     cfg = make_config(args)
@@ -202,6 +215,12 @@ def main() -> None:
         f"log_dir={cfg.log_dir}",
         flush=True,
     )
+    if args.alg == "trpo":
+        tc = cfg.algo.trpo
+        print(f"TRPO regime={tc.critic_regime} policy_gae={tc.gae_lambda} "
+              f"critic_lambda={tc.critic_lambda} E={tc.value_updates} S={tc.value_num_splits} "
+              f"critic_lr={cfg.opt.learning_rate * tc.value_learning_rate_multiplier} "
+              f"delta={tc.delta} cg={tc.cg_iters} damping={tc.cg_damping}", flush=True)
     trainer_cls = QM9GapTrainer if args.task == "qm9" else SEHFragTrainer
     trainer = trainer_cls(cfg)
     trainer.run()

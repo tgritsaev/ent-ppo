@@ -68,7 +68,7 @@ def make_batch(elbo_mask=None, proxy_eubo_mask=None):
     return batch
 
 
-@pytest.mark.parametrize("variant", [TBVariant.TB, TBVariant.DB, TBVariant.SubTB1])
+@pytest.mark.parametrize("variant", [TBVariant.TB, TBVariant.DB, TBVariant.SubTB1, TBVariant.VarGrad])
 def test_elbo_and_proxy_eubo_use_shared_bound_formula_for_tb_variants(variant):
     algo = make_algo(variant)
     batch = make_batch()

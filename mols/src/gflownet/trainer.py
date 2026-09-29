@@ -20,7 +20,9 @@ from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
 from gflownet import GFNAlgorithm, GFNTask
+from gflownet.algo.config import TBVariant
 from gflownet.algo.entropy_ppo import EntPPO
+from gflownet.algo.trpo import TRPO
 from gflownet.algo.trajectory_balance import TrajectoryBalance
 from gflownet.data.data_source import DataSource
 from gflownet.data.replay_buffer import ReplayBuffer
@@ -265,6 +267,9 @@ class GFNTrainer:
                     backward_step=self.backward_step if backward_approach == "tlm" else None,
                     backward_model=backward_model,
                 )
+                if getattr(self.algo, "manual_policy_update", False) and info["trpo_accepted"]:
+                    if self.cfg.algo.valid_use_ema:
+                        self._update_validation_model()
                 step_info = None
             else:
                 gradient_steps = int(getattr(getattr(self.algo, "cfg", None), "gradient_steps", 1))
@@ -554,6 +559,8 @@ class GFNTrainer:
         validation_model = getattr(self, "validation_model", self.model)
         if validation_model is not self.model and validation_model is not self.sampling_model:
             state["validation_model_state_dict"] = [validation_model.state_dict()]
+        if isinstance(self.algo, TRPO):
+            state["algorithm_state_dict"] = self.algo.state_dict()
         fn = pathlib.Path(self.cfg.log_dir) / "model_state.pt"
         with open(fn, "wb") as fd:
             torch.save(
@@ -610,10 +617,15 @@ class StandardOnlineTrainer(GFNTrainer):
             num_graph_out=self.cfg.algo.tb.do_predict_n + 1,
             unif_init=self.cfg.model.unif_init,
         )
+        if self.cfg.algo.method == "TRPO" or (self.cfg.algo.method == "TB" and self.cfg.algo.tb.variant == TBVariant.VarGrad):
+            # No learned partition function or logZ optimizer for VarGrad.
+            del self.model._logZ
 
     def setup_algo(self):
         if self.cfg.algo.method == "TB":
             algo_cls = TrajectoryBalance
+        elif self.cfg.algo.method == "TRPO":
+            algo_cls = TRPO
         elif self.cfg.algo.method in {"EntPPO", "ENTPPO", "PPO"}:
             algo_cls = EntPPO
         else:
@@ -666,9 +678,10 @@ class StandardOnlineTrainer(GFNTrainer):
         else:
             z_params = []
             non_z_params = list(self.model.parameters())
-        self.opt = self._opt(non_z_params)
+        self.opt = None if isinstance(self.algo, TRPO) else self._opt(non_z_params)
         self.opt_Z = self._opt(z_params, self.cfg.algo.tb.Z_learning_rate, 0.9)
-        self.lr_sched = torch.optim.lr_scheduler.LambdaLR(self.opt, lambda steps: 2 ** (-steps / self.cfg.opt.lr_decay))
+        self.lr_sched = (torch.optim.lr_scheduler.LambdaLR(self.opt, lambda steps: 2 ** (-steps / self.cfg.opt.lr_decay))
+                         if self.opt is not None else None)
         self.lr_sched_Z = (
             torch.optim.lr_scheduler.LambdaLR(self.opt_Z, lambda steps: 2 ** (-steps / self.cfg.algo.tb.Z_lr_decay))
             if self.opt_Z is not None

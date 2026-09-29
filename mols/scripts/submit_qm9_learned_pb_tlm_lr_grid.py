@@ -4,6 +4,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from slurm_options import add_slurm_options, slurm_cli
+
 
 def add_common(cmd: list[str], args: argparse.Namespace, project: str) -> list[str]:
     cmd.extend(
@@ -36,6 +38,7 @@ def add_common(cmd: list[str], args: argparse.Namespace, project: str) -> list[s
             "zero",
         ]
     )
+    cmd.extend(slurm_cli(args))
     if args.dry_run:
         cmd.append("--dry-run")
     return cmd
@@ -67,6 +70,7 @@ def main() -> None:
     parser.add_argument("--qm9-h5-path", default="qm9.h5")
     parser.add_argument("--qm9-model-path", default="mxmnet_gap_model.pt")
     parser.add_argument("--dry-run", action="store_true")
+    add_slurm_options(parser)
     args = parser.parse_args()
 
     script = Path(__file__).with_name("launch_seh_metrics_sbatch.py")

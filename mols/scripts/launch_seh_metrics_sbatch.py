@@ -2,23 +2,26 @@ import argparse
 import datetime
 import os
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 
-from slurm_exclusions import EXCLUDED_NODES
+from slurm_options import add_slurm_options
+from trpo_options import add_trpo_options, trpo_name, trpo_cli
 
 
-ALGS = ["tb", "db", "subtb", "ent_ppo"]
+ALGS = ["tb", "db", "subtb", "ent_ppo", "vargrad", "trpo"]
+DEFAULT_ALGS = ["tb", "db", "subtb", "ent_ppo"]
 SEEDS = [0, 1, 2]
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cluster", default="alpha", choices=["alpha", "capella"])
+    add_slurm_options(parser)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--task", choices=["seh", "qm9"], default="seh")
     parser.add_argument("--project", default=f"seh_metrics_256_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
-    parser.add_argument("--algs", nargs="+", default=ALGS, choices=ALGS)
+    parser.add_argument("--algs", nargs="+", default=DEFAULT_ALGS, choices=ALGS)
     parser.add_argument("--seeds", nargs="+", type=int, default=SEEDS)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--valid-batch-size", type=int, default=256)
@@ -53,21 +56,21 @@ def main() -> None:
     parser.add_argument("--time", default="48:00:00")
     parser.add_argument("--log-root", default="./runs")
     parser.add_argument("--env", default=sys.prefix)
-    parser.add_argument("--account", default="")
+    parser.add_argument("--seh-large-test-mols-path", default="data/binary_test_mols.pkl")
     parser.add_argument("--qm9-h5-path", default="qm9.h5")
     parser.add_argument("--qm9-model-path", default="mxmnet_gap_model.pt")
     parser.add_argument("--qm9-rdkit-conformer-timeout-seconds", type=int, default=0)
+    add_trpo_options(parser)
     args = parser.parse_args()
+    if "trpo" in args.algs and (args.baseline_k != 1 or args.backward_approach != "uniform" or args.random_action_schedule != "zero"):
+        parser.error("TRPO requires baseline-k=1, uniform Pb, and zero exploration")
 
-    mem = "120GB" if args.cluster == "alpha" else "182GB"
-    cpus = 6 if args.cluster == "alpha" else 14
     repo_root = str(Path(os.getcwd()).resolve())
     project_root = Path(args.log_root) / args.project
     slurm_log_root = project_root / "slurm"
     if not args.dry_run:
         slurm_log_root.mkdir(parents=True, exist_ok=True)
 
-    excluded_nodes = EXCLUDED_NODES.get(args.cluster, [])
     job_count = 0
     for alg in args.algs:
         for seed in args.seeds:
@@ -102,25 +105,26 @@ def main() -> None:
                 f"{args.task}-{alg}-bs{args.batch_size}{baseline_suffix}{ent_ppo_suffix}"
                 f"{backward_suffix}{random_suffix}-s{seed}"
             )
+            if alg == "trpo":
+                job_name = f"{args.task}-{trpo_name(args)}-bs{args.batch_size}-s{seed}"
             sbatch = [
                 "sbatch",
                 f"--job-name={job_name}",
-                f"--partition={args.cluster}",
                 f"--time={args.time}",
                 "--nodes=1",
                 "--ntasks=1",
-                "--mincpus=1",
-                f"--cpus-per-task={cpus}",
-                "--gres=gpu:1",
+                f"--cpus-per-task={args.cpus_per_task}",
                 "--gpus-per-task=1",
-                f"--mem={mem}",
+                f"--mem={args.mem}",
                 f"--output={slurm_log_root / (job_name + '-%j.out')}",
                 f"--error={slurm_log_root / (job_name + '-%j.err')}",
             ]
+            if args.partition:
+                sbatch.append(f"--partition={args.partition}")
             if args.account:
                 sbatch.append(f"--account={args.account}")
-            if excluded_nodes:
-                sbatch.append(f"--exclude={','.join(excluded_nodes)}")
+            if args.exclude:
+                sbatch.append(f"--exclude={args.exclude}")
             valid_num_eval_dataset_trajectories = (
                 args.valid_num_eval_dataset_trajectories
                 if args.valid_num_eval_dataset_trajectories is not None
@@ -174,9 +178,11 @@ def main() -> None:
                 f"{'--ent-ppo-normalize-advantages' if args.ent_ppo_normalize_advantages else '--no-ent-ppo-normalize-advantages'} "
                 f"--project {shlex.quote(args.project)} "
                 f"--log-root {shlex.quote(args.log_root)} "
+	                f"--seh-large-test-mols-path {shlex.quote(args.seh_large_test_mols_path)} "
 	                f"--qm9-h5-path {shlex.quote(args.qm9_h5_path)} "
 	                f"--qm9-model-path {shlex.quote(args.qm9_model_path)} "
-	                f"--qm9-rdkit-conformer-timeout-seconds {args.qm9_rdkit_conformer_timeout_seconds}"
+	                f"--qm9-rdkit-conformer-timeout-seconds {args.qm9_rdkit_conformer_timeout_seconds} "
+                    + (trpo_cli(args) if alg == "trpo" else "")
 	                )
 	                )
 	            )
@@ -184,7 +190,7 @@ def main() -> None:
             if args.dry_run:
                 print(command)
             else:
-                os.system(command)
+                subprocess.run([*sbatch, "--wrap", python_cmd], check=True)
             job_count += 1
 
     print(f"Total jobs {'to print' if args.dry_run else 'submitted'}: {job_count}")

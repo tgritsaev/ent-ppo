@@ -81,12 +81,20 @@ Online experiment tracking is disabled by default. To enable Comet ML logging, s
 
 ### Installation
 
-Run from the repository root:
+Use a Python 3.10 environment. Run this setup once from the repository root:
 
 ```bash
 cd mols
-pip install -e . --find-links https://data.pyg.org/whl/torch-2.1.2+cu121.html
+python -m pip install -e . "numpy<2" --find-links https://data.pyg.org/whl/torch-2.1.2+cu121.html
+gzip -dk data/binary_test_mols.pkl.gz
 ```
+
+Run all remaining molecular-experiment commands from this `mols/` directory.
+The single-run script and both launchers use the bundled 950-molecule sEH
+evaluation set by default; no dataset flag is needed. The current fragment
+conversion accepts 893 molecules and skips 57. Validation also reports the
+built-in 25-molecule set separately. The sEH reward proxy downloads automatically
+on first use if it is not cached, so that first run requires network access.
 
 The QM9 experiments expect these files in `mols/` unless another path is passed on the command line:
 
@@ -94,8 +102,6 @@ The QM9 experiments expect these files in `mols/` unless another path is passed 
 qm9.h5
 mxmnet_gap_model.pt
 ```
-
-They are included in this repository.
 
 ### Quick runs
 
@@ -124,6 +130,8 @@ python scripts/run_single_seh_metrics.py \
   --task qm9 \
   --alg tb \
   --seed 0 \
+  --batch-size 128 \
+  --valid-batch-size 128 \
   --qm9-h5-path qm9.h5 \
   --qm9-model-path mxmnet_gap_model.pt \
   --num-training-steps 100
@@ -131,26 +139,27 @@ python scripts/run_single_seh_metrics.py \
 
 ### Reproduce experiments from the paper
 
-This submits the main fixed-`Pb` runs for sEH and QM9: TB, DB, SubTB baselines with `K=1` and `K=4`, and Ent-PPO with `K=1,2,4,8`.
+This submits the fixed-`Pb` runs for sEH and QM9: DB, TB, SubTB and VarGrad with `K=1,4`, TRPO with the GFN-PG critic regime, and Ent-PPO with `K=1,2,4,8`. Defaults use seeds `0,1,2` and fixed reward inverse temperature beta=16.
 
-The command is a Slurm launcher. Replace `/path/to/env` with the Python environment that has `mols` installed.
+The command is a Slurm launcher. Replace `/path/to/env` with the Python environment that has `mols` installed. Slightly adapt `scripts/launch_seh_metrics_sbatch.py` to your cluster's Slurm settings.
 
 ```bash
-cd mols
 python scripts/submit_fixed_pb_grid.py \
-  --seh-project seh_fixedpb_eps_grid \
-  --qm9-project qm9_fixedpb_eps_grid \
+  --seh-project seh_fixedpb_grid \
+  --qm9-project qm9_fixedpb_grid \
   --log-root ./runs \
   --env /path/to/env \
   --num-training-steps 1000 \
   --validate-every 25 \
   --valid-num-eval-trajectories 2048 \
-  --ent-ppo-value-num-splits 4 \
+  --ent-ppo-value-updates 4 \
+  --ent-ppo-value-num-splits 8 \
   --qm9-h5-path qm9.h5 \
   --qm9-model-path mxmnet_gap_model.pt
 ```
 
-Use `--dry-run` to print the generated `sbatch` commands without submitting jobs.
+Use `--dry-run` to print the generated `sbatch` commands without submitting jobs, or `--seeds 0` for a single seed.
+See [plotting commands](mols/scripts/PAPER_PLOTS.md) to generate the figures from the saved logs.
 
 # Citation
 

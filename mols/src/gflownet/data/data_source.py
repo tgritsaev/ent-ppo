@@ -211,11 +211,19 @@ class DataSource(IterableDataset):
     ):
         def iterator():
             total = len(data) if num_total is None else min(len(data), num_total)
+            skipped = 0
             for idcs in self.iterate_indices(total, num_samples):
                 t = self.current_iter
                 p = self.algo.get_random_action_prob(t)
-                cond_info = self.task.sample_conditional_information(len(idcs), t)
-                objs, props = map(list, zip(*[data[i] for i in idcs])) if len(idcs) else ([], [])
+                entries = [(i, data[i]) for i in idcs]
+                if hasattr(data, "is_valid"):
+                    usable = [(i, item) for i, item in entries if data.is_valid(i)]
+                    skipped += len(entries) - len(usable)
+                    entries = usable
+                if not entries:
+                    continue
+                objs, props = map(list, zip(*(item for _, item in entries)))
+                cond_info = self.task.sample_conditional_information(len(entries), t)
                 start_time = time.perf_counter()
                 self._timing(f"dataset_backward:start num_samples={len(idcs)}")
                 trajs = self.algo.create_training_data_from_graphs(objs, backwards_model, cond_info["encoding"], p)
@@ -232,6 +240,12 @@ class DataSource(IterableDataset):
                     if is_proxy_eubo and proxy_eubo_label is not None:
                         traj["proxy_eubo_label"] = proxy_eubo_label
                 yield trajs, {}
+            if hasattr(data, "is_valid"):
+                import logging
+                logging.getLogger("logger").info(
+                    "Dataset evaluation: usable=%d skipped_unscorable=%d requested=%d",
+                    total - skipped, skipped, total,
+                )
 
         self.iterators.append(iterator)
         return self
