@@ -13,3 +13,6 @@ __all__ = [
     "TFBind8RewardModule",
     "QM9SmallRewardModule",
 ]
+from .bitseq import BitseqIsingRewardModule
+
+__all__ += ['BitseqIsingRewardModule']

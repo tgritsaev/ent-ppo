@@ -82,3 +82,8 @@ def __getattr__(name):
 
 def __dir__():
     return __all__
+
+from .environment import BitseqEnvironment, IsingBitseqEnvironment
+from .reward import BitseqIsingRewardModule
+
+__all__ += ['BitseqEnvironment', 'IsingBitseqEnvironment', 'BitseqIsingRewardModule']

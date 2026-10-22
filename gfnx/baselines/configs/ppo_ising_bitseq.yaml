@@ -1,0 +1,71 @@
+seed: 0
+env_init_seed: 1
+eval_init_seed: 2
+
+num_train_steps: 50000
+num_envs: 256
+
+agent:
+  learning_rate: 3e-4
+  baseline_learning_rate: 1e-4
+  tlm_backward_learning_rate: 1e-4
+  weight_decay: 1e-5
+  start_eps: 0.0
+  end_eps: 0.0
+  exploration_steps: 0 # Should be <= of num_train_steps
+  gae_lambda: 0.95
+  ppo_policy_epochs: 2
+  ppo_baseline_epochs: 4
+  ppo_baseline_num_splits: 8
+  tlm_epochs: 4
+  clip_eps: 0.2
+  train_backward: false
+  anneal_beta: true
+  beta_anneal_steps: 40000
+
+network:
+  num_heads: 4
+  num_layers: 3
+  embedding_size: 64
+  hidden_size: 64
+  intermediate_size: 64
+  dropout_rate: 0.0
+  attention_dropout_rate: 0.0
+
+environment:
+  fixed_order: false
+  L: 16
+  beta: 0.4407
+  k: 8
+
+metrics:
+  n_rounds: 5
+  batch_size: 2048
+  final_batch_size: 16384
+
+  sinkhorn_reg: 0.001
+  sinkhorn_iters: 200
+  compute_sinkhorn: true
+  sinkhorn_chunk_size: 1024  # must divide batch_size and final_batch_size; keeps memory O(chunk*batch)
+
+logging:
+  track_each: 100 # in terms of total training steps, not divided by num_envs
+  eval_each: 100 # in terms of total training steps, not divided by num_envs
+  metric_buffer_size: 200000
+  tqdm_print_rate: 500
+  use_writer: true
+  log_dir: null # If null, dir will be automatically created
+  checkpoint_dir: null # If null, dir will be automatically created
+# Technical information for writer
+writer:
+  writer_type: null # wandb, trackio or null (no logging online)
+  save_locally: true # Save metrics locally or not
+  entity: azykova-myzina
+  project: ising
+
+# Technical information for hydra
+hydra:
+  run:
+    dir: ./tmp/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ./tmp/${now:%Y-%m-%d}/${now:%H-%M-%S}

@@ -20,3 +20,7 @@ __all__ = [
     "QM9SmallEnvState",
     "QM9SmallEnvParams",
 ]
+from .bitseq import BitseqEnvironment, EnvParams as BitseqEnvParams, EnvState as BitseqEnvState
+from .ising_bitseq import IsingBitseqEnvironment
+
+__all__ += ['BitseqEnvironment', 'BitseqEnvParams', 'BitseqEnvState', 'IsingBitseqEnvironment']

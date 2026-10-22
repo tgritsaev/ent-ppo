@@ -1,0 +1,56 @@
+seed: 0
+env_init_seed: 1
+eval_init_seed: 2
+num_train_steps: 50000
+num_envs: 256
+agent:
+  learning_rate: 0.0003
+  weight_decay: 1.0e-05
+  start_eps: 0.0
+  end_eps: 0.0
+  exploration_steps: 0
+  train_backward: false
+  anneal_beta: true
+  beta_anneal_steps: 40000
+  objective: tb
+  logZ_learning_rate: 0.05
+  lmbd: 1.9
+network:
+  num_heads: 4
+  num_layers: 3
+  embedding_size: 64
+  hidden_size: 64
+  intermediate_size: 64
+  dropout_rate: 0.0
+  attention_dropout_rate: 0.0
+environment:
+  L: 16
+  beta: 0.4407
+  k: 8
+  fixed_order: false
+metrics:
+  n_rounds: 5
+  batch_size: 2048
+  final_batch_size: 16384
+  sinkhorn_reg: 0.001
+  sinkhorn_iters: 200
+  compute_sinkhorn: true
+  sinkhorn_chunk_size: 1024
+logging:
+  track_each: 100
+  eval_each: 100
+  metric_buffer_size: 200000
+  tqdm_print_rate: 500
+  use_writer: true
+  log_dir: null
+  checkpoint_dir: null
+writer:
+  writer_type: null
+  save_locally: true
+  entity: azykova-myzina
+  project: ising
+hydra:
+  run:
+    dir: ./tmp/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ./tmp/${now:%Y-%m-%d}/${now:%H-%M-%S}

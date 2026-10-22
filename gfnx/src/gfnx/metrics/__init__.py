@@ -66,3 +66,7 @@ __all__ = [
     "TopKMetricsModule",
     "TopKMetricsState",
 ]
+
+from .ising_metrics import IsingPhysicsMetricsModule
+
+__all__ += ['IsingPhysicsMetricsModule']
